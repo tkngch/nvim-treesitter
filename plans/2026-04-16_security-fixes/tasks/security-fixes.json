@@ -1,0 +1,32 @@
+[
+  {
+    "id": "1",
+    "content": "[1] Add path containment helper to util.lua",
+    "status": "pending"
+  },
+  {
+    "id": "2",
+    "content": "[2] Path traversal fix — validate query_src and compile_location",
+    "status": "pending"
+  },
+  {
+    "id": "3",
+    "content": "[3] HTTPS enforcement on download URLs",
+    "status": "pending"
+  },
+  {
+    "id": "4",
+    "content": "[4] Atomic parser replacement in do_install",
+    "status": "pending"
+  },
+  {
+    "id": "5",
+    "content": "[5] Run make checklua and verify",
+    "status": "pending"
+  },
+  {
+    "id": "6",
+    "content": "[6] Git commit",
+    "status": "pending"
+  }
+]
