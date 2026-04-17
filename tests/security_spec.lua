@@ -28,7 +28,9 @@ describe('util.is_path_contained', function()
   end)
 
   it('handles deep traversal correctly', function()
-    assert.False(util.is_path_contained('/home/user/project', '/home/user/project/../../etc/passwd'))
+    assert.False(
+      util.is_path_contained('/home/user/project', '/home/user/project/../../etc/passwd')
+    )
   end)
 
   it('returns true for relative contained paths', function()
