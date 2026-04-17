@@ -229,6 +229,11 @@ local function do_download(logger, url, project_name, cache_dir, revision, outpu
   a.schedule()
 
   url = url:gsub('.git$', '')
+
+  if not url:match('^https://') then
+    return logger:error('Refusing non-HTTPS parser URL: %s', url)
+  end
+
   local target = string.format('%s/archive/%s.tar.gz', url, revision)
 
   local tarball_path = fs.joinpath(cache_dir, project_name .. '.tar.gz')
@@ -324,14 +329,34 @@ end
 local function do_install(logger, compile_location, target_location)
   logger:info(string.format('Installing parser'))
 
-  local tempfile = target_location .. tostring(uv.hrtime())
-  uv_rename(target_location, tempfile) -- parser may be in use: rename...
-  uv_unlink(tempfile) -- ...and mark for garbage collection
-
-  local err = uv_copyfile(compile_location, target_location)
+  -- Copy new parser to a temp file next to the target
+  local tempfile = target_location .. '.new.' .. tostring(uv.hrtime())
+  local err = uv_copyfile(compile_location, tempfile)
   a.schedule()
   if err then
-    return logger:error('Error during parser installation: %s', err)
+    uv_unlink(tempfile)
+    return logger:error('Error during parser installation (copy): %s', err)
+  end
+
+  -- Atomically replace old parser with new one
+  local old_backup = target_location .. '.old.' .. tostring(uv.hrtime())
+  if uv.fs_stat(target_location) then
+    uv_rename(target_location, old_backup)
+  end
+
+  err = uv_rename(tempfile, target_location)
+  a.schedule()
+  if err then
+    -- Attempt rollback
+    if uv.fs_stat(old_backup) then
+      uv_rename(old_backup, target_location)
+    end
+    return logger:error('Error during parser installation (rename): %s', err)
+  end
+
+  -- Clean up old backup
+  if uv.fs_stat(old_backup) then
+    uv_unlink(old_backup)
   end
 end
 
@@ -398,7 +423,11 @@ local function try_install_lang(lang, cache_dir, install_dir, generate)
     end
 
     if repo.location then
+      local base = compile_location
       compile_location = fs.joinpath(compile_location, repo.location)
+      if not util.is_path_contained(base, compile_location) then
+        return logger:error('repo.location escapes base directory: %s', repo.location)
+      end
     end
 
     do -- generate parser from grammar
@@ -436,10 +465,18 @@ local function try_install_lang(lang, cache_dir, install_dir, generate)
     local task ---@type function
 
     if repo and repo.queries and repo.path then -- link queries from local repo
-      query_src = fs.joinpath(fs.normalize(repo.path), repo.queries)
+      local base = fs.normalize(repo.path)
+      query_src = fs.joinpath(base, repo.queries)
+      if not util.is_path_contained(base, query_src) then
+        return logger:error('repo.queries escapes base directory: %s', repo.queries)
+      end
       task = do_link_queries
     elseif repo and repo.queries then -- copy queries from tarball
-      query_src = fs.joinpath(cache_dir, project_name, repo.queries)
+      local base = fs.joinpath(cache_dir, project_name)
+      query_src = fs.joinpath(base, repo.queries)
+      if not util.is_path_contained(base, query_src) then
+        return logger:error('repo.queries escapes base directory: %s', repo.queries)
+      end
       task = do_copy_queries
     elseif uv.fs_stat(query_src) then -- link queries from runtime
       task = do_link_queries
